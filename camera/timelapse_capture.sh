@@ -3,9 +3,9 @@
 current_hour=$(date +"%H")
 mode=auto
 output_dir=/home/pi/camera
-sleep_for=30 # 1800000 for 30 min takes
-width=1944 
-height=2592
+sleep_for=1800000 # for 30 min takes
+width=1944    
+height=2200  
 
 mkdir -p $output_dir
 
@@ -19,6 +19,6 @@ while true; do
     mode=night
   fi
   current_datetime=$(date +"%FT%H-%M-%S%Z")
-  raspistill -e png  -ex "$mode" --nopreview -o "$output_dir/${current_datetime}.png"
+  raspistill -e png -w "$width" -h "$height" -ex "$mode" --nopreview -o "$output_dir/${current_datetime}.png"
   sleep $sleep_for
 done
