@@ -1,0 +1,10 @@
+version: '2.1'
+
+services:
+  plant_camera:
+    image: python
+    
+    build: .
+    command: ["python3", "-u", "/app/camera/camera_script.py"]
+    volumes:
+      - .:/app
