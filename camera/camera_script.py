@@ -28,6 +28,7 @@ def main():
     logging.info(f"Creating SFTP to {server}")
     sftp_client = ssh.open_sftp()
 
+    ssh.exec_command(f"sudo touch /tmp/stop_timelapse")
     ssh.exec_command(f"sudo systemctl stop timelapse")
 
     # lets put our current version of the file in the necessarsy location
@@ -36,7 +37,9 @@ def main():
 
     # who knows how many files there are so lets get them
     file_gen = sftp_client.listdir("/home/pi/camera")
+    logging.info(f"There are {len(file_gen)} image(s) to transfer")
     for f in file_gen:
+        logging.info(f"Transfering {f}")
 
         remote_file = f"/home/pi/camera/{f}"
         local_file = f"/app/output/pictures/{f}"
@@ -48,13 +51,13 @@ def main():
         sftp_client.remove(remote_file)
 
     ssh.exec_command(f"sudo systemctl restart timelapse")
-
+    logging.info("Processing Gif")
     images = []
     output_images = os.listdir(local_output)
     output_images.sort()
     for picture in output_images:
         images.append(imageio.imread(f"/app/output/pictures/{picture}"))
-    imageio.mimsave(local_gif, images)
+    imageio.mimwrite(local_gif, images)
 
 
 if __name__ == "__main__":
