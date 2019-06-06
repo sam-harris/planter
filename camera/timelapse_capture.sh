@@ -16,7 +16,7 @@ done
 current_hour=$(date +"%H")
 mode=auto
 output_dir=/home/pi/camera
-sleep_for=1800 # for 30 min takes
+sleep_for=3600 # for 60 min takes
 width=1800    
 height=2200  
 
