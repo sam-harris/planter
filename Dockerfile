@@ -13,7 +13,10 @@ LABEL Name=codebase Version=0.0.1
 WORKDIR /app
 
 RUN apk update
-RUN apk add gcc musl-dev python3-dev libffi-dev openssl-dev make jpeg-dev zlib-dev 
+RUN apk add gcc musl-dev python3-dev libffi-dev openssl-dev make jpeg-dev zlib-dev freetype-dev
+RUN apk --no-cache add msttcorefonts-installer fontconfig && \
+    update-ms-fonts && \
+    fc-cache -f
 
 COPY ./requirements.txt ./requirements.txt
 

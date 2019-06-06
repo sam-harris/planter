@@ -5,6 +5,10 @@ import logging
 import paramiko
 import imageio
 import time
+from dateutil.parser import parse
+from dateutil.tz import gettz
+
+from PIL import Image, ImageDraw, ImageFont
 
 logging.basicConfig(format="%(asctime)s %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p", level=logging.INFO)
 
@@ -54,7 +58,26 @@ def main():
     logging.info("Processing Gif")
     images = []
     output_images = os.listdir(local_output)
+
     output_images.sort()
+
+    for p in output_images:
+        # we need to conver the - to : in the timezone
+        # 2019-06-01T14-54-51EDT
+        timestamp = p[: p.index("T")] + p[p.index("T") : -4].replace("-", ":")
+
+        tzinfos = {"EDT": gettz("America/New_York")}
+        yourdate = parse(timestamp, tzinfos=tzinfos)
+
+        img = Image.open(f"/app/output/pictures/{p}")
+        w, h = img.size
+
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype("Arial.ttf", 72)
+        text_w, text_h = draw.textsize(str(yourdate), font)
+        draw.text(((w - text_w), h - text_h - 10), str(yourdate), (255, 8, 0), font=font)
+        img.save(f"/app/output/pictures/{p}")
+
     for picture in output_images:
         images.append(imageio.imread(f"/app/output/pictures/{picture}"))
     imageio.mimwrite(local_gif, images)

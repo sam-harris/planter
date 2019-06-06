@@ -1,2 +1,4 @@
 paramiko
 imageio
+pillow
+python-dateutil
