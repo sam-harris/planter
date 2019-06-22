@@ -1,4 +1,5 @@
 import os
+import psutil
 import stat
 import base64
 import logging
@@ -9,6 +10,7 @@ from dateutil.parser import parse
 from dateutil.tz import gettz
 
 from PIL import Image, ImageDraw, ImageFont
+
 
 logging.basicConfig(format="%(asctime)s %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p", level=logging.INFO)
 
@@ -41,9 +43,12 @@ def main():
 
     # who knows how many files there are so lets get them
     file_gen = sftp_client.listdir("/home/pi/camera")
-    logging.info(f"There are {len(file_gen)} image(s) to transfer")
+    remaining = len(file_gen)
+    logging.info(f"There are {remaining} image(s) to transfer")
     for f in file_gen:
+        logging.info(f"There are {remaining} file(s) left")
         logging.info(f"Transfering {f}")
+        remaining -= 1
 
         remote_file = f"/home/pi/camera/{f}"
         local_file = f"/app/output/pictures/{f}"
@@ -54,6 +59,22 @@ def main():
         # now that we have the file delete it from the remote
         sftp_client.remove(remote_file)
 
+        # we need to conver the - to : in the timezone
+        # 2019-06-01T14-54-51EDT
+        timestamp = f[: f.index("T")] + f[f.index("T") : -4].replace("-", ":")
+
+        tzinfos = {"EDT": gettz("America/New_York")}
+        yourdate = parse(timestamp, tzinfos=tzinfos)
+
+        img = Image.open(f"/app/output/pictures/{f}")
+        w, h = img.size
+
+        draw = ImageDraw.Draw(img)
+        font = ImageFont.truetype("Arial.ttf", 72)
+        text_w, text_h = draw.textsize(str(yourdate), font)
+        draw.text(((w - text_w), h - text_h - 10), str(yourdate), (255, 8, 0), font=font)
+        img.save(f"/app/output/pictures/{f}")
+
     ssh.exec_command(f"sudo systemctl restart timelapse")
     logging.info("Processing Gif")
     images = []
@@ -61,25 +82,15 @@ def main():
 
     output_images.sort()
 
-    for p in output_images:
-        # we need to conver the - to : in the timezone
-        # 2019-06-01T14-54-51EDT
-        timestamp = p[: p.index("T")] + p[p.index("T") : -4].replace("-", ":")
+    for picture in output_images:
+        # print(psutil.virtual_memory())
 
+        timestamp = picture[: picture.index("T")] + picture[picture.index("T") : -4].replace("-", ":")
         tzinfos = {"EDT": gettz("America/New_York")}
         yourdate = parse(timestamp, tzinfos=tzinfos)
-
-        img = Image.open(f"/app/output/pictures/{p}")
-        w, h = img.size
-
-        draw = ImageDraw.Draw(img)
-        font = ImageFont.truetype("Arial.ttf", 72)
-        text_w, text_h = draw.textsize(str(yourdate), font)
-        draw.text(((w - text_w), h - text_h - 10), str(yourdate), (255, 8, 0), font=font)
-        img.save(f"/app/output/pictures/{p}")
-
-    for picture in output_images:
-        images.append(imageio.imread(f"/app/output/pictures/{picture}"))
+        # if this is between 10 am and 2 pm use it to get the best possible light
+        if 12 <= yourdate.hour <= 12:
+            images.append(imageio.imread(f"/app/output/pictures/{picture}"))
     imageio.mimwrite(local_gif, images)
 
 

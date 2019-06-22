@@ -28,7 +28,7 @@ mkdir -p $output_dir
 
 while ((!SHUTDOWN)); do
   current_hour=$(date +"%H")
-  if [[ "${current_hour#0}" -gt 5 && "${current_hour#0}" -lt 21 ]]; then
+  if [[ "${current_hour#0}" -gt 7 && "${current_hour#0}" -lt 19 ]]; then
     # this runs 6am to 8pm
     current_datetime=$(date +"%FT%H-%M-%S%Z")
     raspistill -e png -w "$width" -ex "$mode" --nopreview -o "$output_dir/${current_datetime}.png"
