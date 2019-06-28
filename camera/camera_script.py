@@ -1,16 +1,17 @@
-import os
-import psutil
-import stat
+import asyncio
 import base64
+import concurrent.futures
 import logging
-import paramiko
-import imageio
+import os
+import stat
 import time
+
+import imageio
+import paramiko
+import psutil
 from dateutil.parser import parse
 from dateutil.tz import gettz
-
 from PIL import Image, ImageDraw, ImageFont
-
 
 logging.basicConfig(format="%(asctime)s %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p", level=logging.INFO)
 
@@ -24,7 +25,50 @@ local_output = "/app/output/pictures"
 local_gif = "/app/output/gifs/plant_movie.gif"
 
 
-def main():
+def get_connection():
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    logging.info(f"Connecting to {server}")
+    ssh.connect(server, username=user, password=base64.b64decode(password))
+    logging.info(f"Creating SFTP to {server}")
+    sftp_client = ssh.open_sftp()
+    return sftp_client
+
+
+def do_work(f):
+
+    sftp_client = get_connection()
+    logging.info(f"Transfering {f}")
+
+    remote_file = f"/home/pi/camera/{f}"
+    local_file = f"/app/output/pictures/{f}"
+    # lets transfer this file
+
+    sftp_client.get(remote_file, local_file)
+
+    # now that we have the file delete it from the remote
+    sftp_client.remove(remote_file)
+
+    # we need to conver the - to : in the timezone
+    # 2019-06-01T14-54-51EDT
+    timestamp = f[: f.index("T")] + f[f.index("T") : -4].replace("-", ":")
+
+    tzinfos = {"EDT": gettz("America/New_York")}
+    yourdate = parse(timestamp, tzinfos=tzinfos)
+
+    img = Image.open(f"/app/output/pictures/{f}")
+    w, h = img.size
+
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("Arial.ttf", 72)
+    text_w, text_h = draw.textsize(str(yourdate), font)
+    draw.text(((w - text_w), h - text_h - 10), str(yourdate), (255, 8, 0), font=font)
+    img.save(f"/app/output/pictures/{f}")
+
+    return True
+
+
+async def main():
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -45,35 +89,10 @@ def main():
     file_gen = sftp_client.listdir("/home/pi/camera")
     remaining = len(file_gen)
     logging.info(f"There are {remaining} image(s) to transfer")
-    for f in file_gen:
-        logging.info(f"There are {remaining} file(s) left")
-        logging.info(f"Transfering {f}")
-        remaining -= 1
 
-        remote_file = f"/home/pi/camera/{f}"
-        local_file = f"/app/output/pictures/{f}"
-        # lets transfer this file
-
-        sftp_client.get(remote_file, local_file)
-
-        # now that we have the file delete it from the remote
-        sftp_client.remove(remote_file)
-
-        # we need to conver the - to : in the timezone
-        # 2019-06-01T14-54-51EDT
-        timestamp = f[: f.index("T")] + f[f.index("T") : -4].replace("-", ":")
-
-        tzinfos = {"EDT": gettz("America/New_York")}
-        yourdate = parse(timestamp, tzinfos=tzinfos)
-
-        img = Image.open(f"/app/output/pictures/{f}")
-        w, h = img.size
-
-        draw = ImageDraw.Draw(img)
-        font = ImageFont.truetype("Arial.ttf", 72)
-        text_w, text_h = draw.textsize(str(yourdate), font)
-        draw.text(((w - text_w), h - text_h - 10), str(yourdate), (255, 8, 0), font=font)
-        img.save(f"/app/output/pictures/{f}")
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for file_name, result in zip(file_gen, executor.map(do_work, file_gen)):
+            print(f"Processed {file_name} with a result of {result}")
 
     ssh.exec_command(f"sudo systemctl restart timelapse")
     logging.info("Processing Gif")
@@ -95,4 +114,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+
+    asyncio.run(main())
