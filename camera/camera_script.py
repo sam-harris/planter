@@ -1,17 +1,15 @@
 import base64
-import concurrent.futures
 import logging
 import os
 import stat
-import time
+from multiprocessing import Pool
 
 import imageio
 import paramiko
-import psutil
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from PIL import Image, ImageDraw, ImageFont
-from multiprocessing import Pool
+
 
 logging.basicConfig(
     format="%(processName)s |%(process)d| %(asctime)s %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p", level=logging.INFO
@@ -46,6 +44,7 @@ def init_worker():
 
 
 def do_work(f):
+
     global connection
     logging.info(f"Transfering {f}")
 
@@ -99,7 +98,7 @@ def main():
     remaining = len(file_gen)
     logging.info(f"There are {remaining} image(s) to transfer")
 
-    with Pool(processes=20, initializer=init_worker) as p:
+    with Pool(processes=16, initializer=init_worker) as p:
         p.map(do_work, file_gen)
     logging.info("Done Transferring")
 
