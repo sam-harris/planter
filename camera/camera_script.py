@@ -4,6 +4,9 @@ import os
 import stat
 from multiprocessing import Pool
 
+from time import sleep
+from random import randint
+
 import imageio
 import paramiko
 from dateutil.parser import parse
@@ -40,6 +43,7 @@ def get_connection():
 # to be called in worker process
 def init_worker():
     global connection
+    sleep(randint(0, 5))
     connection = get_connection()
 
 
@@ -53,9 +57,10 @@ def do_work(f):
     # lets transfer this file
 
     connection.get(remote_file, local_file)
-
+    logging.info(f"Done Transfering {f}")
     # now that we have the file delete it from the remote
     connection.remove(remote_file)
+    logging.info(f"Deleted {f} on Remote")
 
     # we need to conver the - to : in the timezone
     # 2019-06-01T14-54-51EDT
@@ -72,6 +77,7 @@ def do_work(f):
     text_w, text_h = draw.textsize(str(yourdate), font)
     draw.text(((w - text_w), h - text_h - 10), str(yourdate), (255, 8, 0), font=font)
     img.save(f"/app/output/pictures/{f}")
+    logging.info(f"Done adding Timestamp to {f}")
 
     return True
 
@@ -98,7 +104,7 @@ def main():
     remaining = len(file_gen)
     logging.info(f"There are {remaining} image(s) to transfer")
 
-    with Pool(processes=16, initializer=init_worker) as p:
+    with Pool(processes=4, initializer=init_worker, maxtasksperchild=2) as p:
         p.map(do_work, file_gen)
     logging.info("Done Transferring")
 
