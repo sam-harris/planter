@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import concurrent.futures
 import logging
@@ -12,8 +11,11 @@ import psutil
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from PIL import Image, ImageDraw, ImageFont
+from multiprocessing import Pool
 
-logging.basicConfig(format="%(asctime)s %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p", level=logging.INFO)
+logging.basicConfig(
+    format="%(processName)s |%(process)d| %(asctime)s %(message)s", datefmt="%m/%d/%Y %I:%M:%S %p", level=logging.INFO
+)
 
 server = "10.0.0.48"
 user = "pi"
@@ -23,6 +25,8 @@ capture_local_file = "/app/camera/timelapse_capture.sh"
 capture_remote_file = "/home/pi/timelapse_capture.sh"
 local_output = "/app/output/pictures"
 local_gif = "/app/output/gifs/plant_movie.gif"
+
+connection = None
 
 
 def get_connection():
@@ -35,19 +39,24 @@ def get_connection():
     return sftp_client
 
 
-def do_work(f):
+# to be called in worker process
+def init_worker():
+    global connection
+    connection = get_connection()
 
-    sftp_client = get_connection()
+
+def do_work(f):
+    global connection
     logging.info(f"Transfering {f}")
 
     remote_file = f"/home/pi/camera/{f}"
     local_file = f"/app/output/pictures/{f}"
     # lets transfer this file
 
-    sftp_client.get(remote_file, local_file)
+    connection.get(remote_file, local_file)
 
     # now that we have the file delete it from the remote
-    sftp_client.remove(remote_file)
+    connection.remove(remote_file)
 
     # we need to conver the - to : in the timezone
     # 2019-06-01T14-54-51EDT
@@ -68,7 +77,7 @@ def do_work(f):
     return True
 
 
-async def main():
+def main():
 
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -90,9 +99,9 @@ async def main():
     remaining = len(file_gen)
     logging.info(f"There are {remaining} image(s) to transfer")
 
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        for file_name, result in zip(file_gen, executor.map(do_work, file_gen)):
-            print(f"Processed {file_name} with a result of {result}")
+    with Pool(processes=20, initializer=init_worker) as p:
+        p.map(do_work, file_gen)
+    logging.info("Done Transferring")
 
     ssh.exec_command(f"sudo systemctl restart timelapse")
     logging.info("Processing Gif")
@@ -115,4 +124,4 @@ async def main():
 
 if __name__ == "__main__":
 
-    asyncio.run(main())
+    main()
